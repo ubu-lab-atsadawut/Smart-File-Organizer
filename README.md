@@ -135,6 +135,12 @@ Windows (PowerShell):
 .\.venv\Scripts\Activate.ps1
 ```
 
+Linux / macOS (bash, zsh):
+
+```bash
+source .venv/bin/activate
+```
+
 ### 3) ติดตั้ง dependencies
 
 ```bash
