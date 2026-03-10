@@ -1,5 +1,7 @@
 # Smart File Organizer
 
+![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+
 ระบบ Desktop สำหรับสแกนโฟลเดอร์และจัดระเบียบไฟล์อัตโนมัติเป็นหมวดหมู่ เช่น Images, Documents, Videos และ Code
 
 พัฒนาด้วย **Python 3.10+** และ **PySide6** พร้อมการออกแบบที่เน้น **OOP + SOLID + Design Patterns**
@@ -11,7 +13,8 @@
 | รายการ | รายละเอียด |
 | ------ | ---------- |
 | ชื่อทีม | Smart File Organizer |
-| สมาชิก | นาย อัษฎาวุฑ พันธ์สาลี |
+| สมาชิก | นาย อัษฎาวุธ พันธ์สาลี |
+| รหัสนักศึกษา | 68114540737 |
 | หน้าที่รับผิดชอบ | ออกแบบและพัฒนาโปรแกรมทั้งหมด (UI, OOP/SOLID, ทดสอบระบบ) |
 
 ---
