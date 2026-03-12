@@ -172,3 +172,7 @@ python main.py
 - Source code อยู่ใน repository นี้ครบถ้วน
 - มีไฟล์ `README.md`, `requirements.txt`, `pyproject.toml`
 - โครงการนี้พัฒนาขึ้นใหม่และแสดงการประยุกต์ใช้ OOP, SOLID และ Design Patterns อย่างชัดเจน
+
+---
+
+## VDO
