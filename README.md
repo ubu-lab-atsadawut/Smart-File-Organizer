@@ -177,6 +177,7 @@ python main.py
 
 ## VDO
 
-[Watch Demo Video](https://drive.google.com/file/d/11oko_cs5V-L0hpAej9o1UW6KOqTfua1m/view?usp=sharing)
+[Link1 Watch Demo Video](https://drive.google.com/file/d/11oko_cs5V-L0hpAej9o1UW6KOqTfua1m/view?usp=sharing)
+[Link2 Watch Demo Video](https://docs.google.com/videos/d/1lwynGdwG2IxyTnZ39ZciilLWmHHkLpHb5lGgatAQQCo/edit?usp=sharing)
 
 ---
