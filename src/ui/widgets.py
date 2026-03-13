@@ -7,7 +7,7 @@ import os
 import hashlib
 from collections import defaultdict
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QTimer, Signal, QPoint, QRect, QSize
 from PySide6.QtGui import QPainter, QColor
 from PySide6.QtWidgets import (
     QFrame,
@@ -17,9 +17,10 @@ from PySide6.QtWidgets import (
     QPushButton,
     QDialog,
     QScrollArea,
-    QScrollArea,
     QVBoxLayout,
     QWidget,
+    QLayout,
+    QSizePolicy,
 )
 
 from .styles import (
@@ -310,14 +311,206 @@ class ResultPanel(QScrollArea):
 
 # ── Settings Dialog ─────────────────────────────────────────────────
 
+class FlowLayout(QLayout):
+    def __init__(self, parent=None, margin=-1, hSpacing=-1, vSpacing=-1):
+        super().__init__(parent)
+        self._hSpace = hSpacing
+        self._vSpace = vSpacing
+        self._items = []
+        if margin != -1:
+            self.setContentsMargins(margin, margin, margin, margin)
+
+    def __del__(self):
+        item = self.takeAt(0)
+        while item:
+            item = self.takeAt(0)
+
+    def addItem(self, item):
+        self._items.append(item)
+
+    def horizontalSpacing(self):
+        if self._hSpace >= 0:
+            return self._hSpace
+        return sum(self.getContentsMargins())
+
+    def verticalSpacing(self):
+        if self._vSpace >= 0:
+            return self._vSpace
+        return sum(self.getContentsMargins())
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, index):
+        if 0 <= index < len(self._items):
+            return self._items[index]
+        return None
+
+    def takeAt(self, index):
+        if 0 <= index < len(self._items):
+            return self._items.pop(index)
+        return None
+
+    def expandingDirections(self):
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self.doLayout(QRect(0, 0, width, 0), True)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self.doLayout(rect, False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        margins = self.contentsMargins()
+        size += QSize(margins.left() + margins.right(), margins.top() + margins.bottom())
+        return size
+
+    def doLayout(self, rect, testOnly):
+        x = rect.x()
+        y = rect.y()
+        lineHeight = 0
+        for item in self._items:
+            spaceX = self.horizontalSpacing()
+            spaceY = self.verticalSpacing()
+            nextX = x + item.sizeHint().width() + spaceX
+            if nextX - spaceX > rect.right() and lineHeight > 0:
+                x = rect.x()
+                y = y + lineHeight + spaceY
+                nextX = x + item.sizeHint().width() + spaceX
+                lineHeight = 0
+            if not testOnly:
+                item.setGeometry(QRect(QPoint(x, y), item.sizeHint()))
+            x = nextX
+            lineHeight = max(lineHeight, item.sizeHint().height())
+        return y + lineHeight - rect.y()
+
+
+class TagLineEdit(QLineEdit):
+    backspace_empty = Signal()
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Backspace and not self.text():
+            self.backspace_empty.emit()
+        super().keyPressEvent(event)
+
+
+class Tag(QFrame):
+    removed = Signal(object)
+    
+    def __init__(self, text: str, parent=None):
+        super().__init__(parent)
+        self.text = text
+        self.setObjectName("Tag")
+        self.setStyleSheet(f"""
+            QFrame#Tag {{
+                background: {BG_CARD_HOVER};
+                border: 1px solid {BORDER};
+                border-radius: 4px;
+            }}
+        """)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(6, 2, 4, 2)
+        layout.setSpacing(4)
+        label = QLabel(text)
+        label.setStyleSheet(f"color: {TEXT_PRIMARY}; border: none; background: transparent; font-size: 13px;")
+        close_btn = QPushButton("×")
+        close_btn.setFixedSize(16, 16)
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setStyleSheet(f"""
+            QPushButton {{ color: {TEXT_MUTED}; border: none; background: transparent; font-weight: bold; font-size: 16px; padding-bottom: 2px; }}
+            QPushButton:hover {{ color: {DANGER}; }}
+        """)
+        close_btn.clicked.connect(lambda: self.removed.emit(self))
+        layout.addWidget(label)
+        layout.addWidget(close_btn)
+
+
+class TagInputFrame(QWidget):
+    def __init__(self, extensions: set[str], parent=None):
+        super().__init__(parent)
+        self.setObjectName("TagInputFrame")
+        self.setStyleSheet(f"#TagInputFrame {{ background: transparent; border: 1px solid #222; border-radius: 4px; }}")
+        self.setCursor(Qt.CursorShape.IBeamCursor)
+        
+        self._layout = FlowLayout(self, margin=4, hSpacing=6, vSpacing=6)
+        self._input = TagLineEdit()
+        self._input.setPlaceholderText("Add ext (e.g. .jpg)...")
+        self._input.setStyleSheet(f"background: transparent; border: none; color: {TEXT_PRIMARY}; font-size: 13px; min-width: 140px;")
+        self._input.returnPressed.connect(self._commit_text)
+        self._input.textChanged.connect(self._on_text_changed)
+        self._input.backspace_empty.connect(self._on_backspace_empty)
+        
+        self._tags = []
+        for ext in sorted(extensions):
+            if ext:
+                self.add_tag(ext)
+                
+        self._layout.addWidget(self._input)
+        
+    def mousePressEvent(self, event):
+        self._input.setFocus()
+        
+    def _on_text_changed(self, text: str):
+        if text.endswith(' ') or text.endswith(','):
+            self._commit_text()
+            
+    def _commit_text(self):
+        text = self._input.text().replace(',', ' ').strip()
+        if text:
+            current_exts = {tag.text for tag in self._tags}
+            parts = [p.strip() for p in text.split() if p.strip()]
+            for p in parts:
+                if not p.startswith('.'):
+                    p = '.' + p
+                if p not in current_exts:
+                    self.add_tag(p)
+                    current_exts.add(p)
+        self._input.clear()
+
+    def _on_backspace_empty(self):
+        if self._tags:
+            tag = self._tags[-1]
+            # put extension back (without dot) to make fixing typos easy
+            self._input.setText(tag.text.lstrip('.'))
+            self.remove_tag(tag)
+
+    def add_tag(self, text: str):
+        tag = Tag(text)
+        tag.removed.connect(self.remove_tag)
+        self._tags.append(tag)
+        self._layout.removeWidget(self._input)
+        self._layout.addWidget(tag)
+        self._layout.addWidget(self._input)
+
+    def remove_tag(self, tag: Tag):
+        if tag in self._tags:
+            self._tags.remove(tag)
+        self._layout.removeWidget(tag)
+        tag.deleteLater()
+
+    def get_extensions(self) -> set[str]:
+        self._commit_text()
+        return {tag.text for tag in self._tags}
+
+
 class SettingsRow(QFrame):
     """A row containing Name, Extensions, and Delete button."""
     delete_requested = Signal(object)
 
     def __init__(self, name: str, extensions: set[str], parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setObjectName("SettingsRow")
         self.setStyleSheet(
-            f"background: #111; border: 1px solid {BORDER}; border-radius: 4px;"
+            f"QFrame#SettingsRow {{ background: #111; border: 1px solid {BORDER}; border-radius: 4px; }}"
         )
         
         layout = QHBoxLayout(self)
@@ -326,12 +519,11 @@ class SettingsRow(QFrame):
 
         self.name_input = QLineEdit(name)
         self.name_input.setPlaceholderText("Category Name")
-        self.name_input.setStyleSheet(f"background: transparent; border: none; color: {TEXT_PRIMARY};")
-        self.name_input.setMinimumWidth(100)
+        self.name_input.setStyleSheet(f"background: transparent; border: none; color: {TEXT_PRIMARY}; font-size: 14px; font-weight: bold;")
+        self.name_input.setMinimumWidth(120)
+        self.name_input.setMaximumWidth(150)
         
-        self.ext_input = QLineEdit(", ".join(sorted(extensions)))
-        self.ext_input.setPlaceholderText("e.g. .jpg, .png")
-        self.ext_input.setStyleSheet(f"background: transparent; border: none; color: {TEXT_PRIMARY};")
+        self.ext_input = TagInputFrame(extensions)
         
         self.del_btn = QPushButton("🗑")
         self.del_btn.setFixedSize(32, 32)
@@ -341,14 +533,13 @@ class SettingsRow(QFrame):
         )
         self.del_btn.clicked.connect(lambda: self.delete_requested.emit(self))
         
-        layout.addWidget(self.name_input, 1)
-        layout.addWidget(self.ext_input, 2)
-        layout.addWidget(self.del_btn)
+        layout.addWidget(self.name_input, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(self.ext_input, 1)
+        layout.addWidget(self.del_btn, 0, Qt.AlignmentFlag.AlignTop)
 
     def get_data(self) -> tuple[str, set[str]]:
         name = self.name_input.text().strip()
-        ext_str = self.ext_input.text()
-        extensions = {ext.strip() for ext in ext_str.split(",") if ext.strip()}
+        extensions = self.ext_input.get_extensions()
         return name, extensions
 
 
